@@ -95,7 +95,7 @@ const Ctx = {
 };
 
 // ==========================================
-// 2. NAME & GENERATOR
+// 2. NAME GEN
 // ==========================================
 
 const NameGen = {
@@ -105,54 +105,131 @@ const NameGen = {
     pick: (arr) => arr[Math.floor(Math.random() * arr.length)]
 };
 
+// ==========================================
+// 3. ADVANCED GENERATOR
+// ==========================================
+
 const Generator = {
+    // Math Primitives
     ops: ['+','-','*'],
-    funcs: ['sin','cos','abs','floor'],
-    // ONLY VALID NOISE TYPES
+    funcs: ['sin','cos','abs','floor','round','sqrt'],
     noiseTypes: ['Perlin', 'Simplex', 'Normal', 'Blended'],
     
+    // THEMES (GENERATION TYPES)
+    themes: [
+        'Blocky', 'Smooth', 'Upwards', 'Downward', 'Reverse', 'Forward', 
+        'FlipX', 'FlipY', 'FlipZ', 'Void', 'Tower', 'Skyscraper', 
+        'Holes', 'Cavern', 'Fantasy', 'Underwater', 'Hell', 'Realistic', 
+        'One Block', 'X-Ray', 'Sphere', 'Cubes', 'Pyramid', 'Torus', 
+        'Star', 'Notch', 'Underworld', 'Floating', 'Floating Island', 
+        'Upside Down', 'Digital', 'Modern', 'Cyberpunk2077', 
+        'Maze', 'Giant Maze', 'Auto Maze'
+    ],
+    
+    // LEVELS (Complexity)
+    levels: ['Hardcoded', 'Expert', 'Unreal', 'Long Math', 'Intermediate'],
+
     pick: arr => arr[Math.floor(Math.random()*arr.length)],
     
+    // Generate a random math expression fragment
     genExpr: function(depth, noiseKey) {
         if(depth <= 0) {
             const r = Math.random();
-            if(r < 0.6) return (Math.random() < 0.5 ? 'x' : 'z') + '*' + (Math.random()*0.15).toFixed(3);
-            return (Math.random()*10).toFixed(1);
+            if(r < 0.6) return (Math.random() < 0.5 ? 'x' : 'z') + '*' + (Math.random()*0.15 + 0.01).toFixed(3);
+            return (Math.random()*15).toFixed(1);
         }
         const type = Math.random();
+        // 30% Binary Op, 30% Unary Op, 40% Noise
         if(type < 0.3) return `(${this.genExpr(depth-1, noiseKey)} ${this.pick(this.ops)} ${this.genExpr(depth-1, noiseKey)})`;
         if(type < 0.6) return `${this.pick(this.funcs)}(${this.genExpr(depth-1, noiseKey)})`;
         
-        // Use the specific noise type for this generation
-        return `${noiseKey.toLowerCase()}(x*0.05, 0, z*0.05) * 15`;
+        return `${noiseKey.toLowerCase()}(x*${(Math.random()*0.1).toFixed(3)}, 0, z*${(Math.random()*0.1).toFixed(3)}) * ${(Math.random()*20+5).toFixed(0)}`;
     },
 
+    // Main entry point
     create: function() {
-        const noiseType = this.pick(this.noiseTypes);
-        const categories = ['Hardcoded', 'Expert', 'Unreal', 'Long Math', 'Intermediate'];
-        const genType = this.pick(categories);
+        const theme = this.pick(this.themes);
+        const level = this.pick(this.levels);
+        const noise = this.pick(this.noiseTypes);
         
-        let formula = "";
-        
-        if (genType === 'Hardcoded') {
-            formula = `floor(${noiseType.toLowerCase()}(x*0.1, 0, z*0.1) * 10)`;
-        } else if (genType === 'Long Math') {
-            formula = `${this.genExpr(2, noiseType)} + ${this.genExpr(2, noiseType)}`;
-        } else {
-            formula = `${this.genExpr(3, noiseType)} * 10`;
-        }
+        let formula = this.getFormulaForTheme(theme, noise, level);
 
-        // Return object with all metadata
         return {
             formula: formula,
-            noise: noiseType, // Perlin, Simplex, Normal, Blended
-            type: genType // Expert, Unreal, etc.
+            noise: noise,
+            type: theme,
+            level: level
         };
+    },
+
+    // Theme Logic
+    getFormulaForTheme: function(theme, noiseKey, level) {
+        // Base complexity based on level
+        let depth = 3;
+        if(level === 'Expert') depth = 4;
+        if(level === 'Long Math') depth = 5;
+        if(level === 'Hardcoded') depth = 1;
+
+        const baseNoise = `${noiseKey.toLowerCase()}(x*0.05, 0, z*0.05)`;
+        const randExpr = this.genExpr(depth, noiseKey);
+
+        switch(theme) {
+            // DIRECTIONAL / TRANSFORM
+            case 'Upwards': return `abs(${randExpr}) + (x + z) * 0.1`;
+            case 'Downward': return `abs(${randExpr}) - (x + z) * 0.1`;
+            case 'Reverse': return `-1 * (${randExpr})`;
+            case 'Forward': return `(${randExpr}) + z * 0.5`;
+            case 'FlipX': return `sin(-x*0.1) * 10 + ${baseNoise}*10`;
+            case 'FlipY': return `-1 * abs(${randExpr})`;
+            case 'FlipZ': return `cos(-z*0.1) * 10 + ${baseNoise}*10`;
+            case 'Upside Down': return `-1 * (${randExpr} + 20)`;
+            
+            // VOXEL / GRID
+            case 'Blocky': return `floor(${baseNoise} * 15) * 2`;
+            case 'Cubes': return `floor(x/4)*4 + floor(z/4)*4 + ${baseNoise}*5`;
+            case 'Digital': return `round(${baseNoise} * 10) * 2 + mod(x, 2)`;
+            case 'Modern': return `max(abs(x%10), abs(z%10)) + ${baseNoise}*5`;
+            case 'Cyberpunk2077': return `mod(floor(x), 5) * mod(floor(z), 5) * 5 + ${baseNoise}*10`;
+            case 'One Block': return `(abs(x)<1 && abs(z)<1) ? 10 : 0`;
+            case 'X-Ray': return `(mod(x, 2) > 1 && mod(z, 2) > 1) ? ${baseNoise}*20 : 0`;
+            
+            // GEOMETRIC
+            case 'Sphere': return `sqrt(max(0, 900 - x*x - z*z))`;
+            case 'Torus': return `sqrt(max(0, 100 - pow(sqrt(x*x+z*z) - 30, 2)))`;
+            case 'Pyramid': return `max(0, 40 - max(abs(x), abs(z)))`;
+            case 'Star': return `max(0, 30 - sqrt(x*x+z*z) + sin(atan2(z,x)*5)*10)`;
+            case 'Tower': return `max(0, 50 - sqrt(x*x+z*z)*2)`;
+            
+            // ORGANIC / NATURE
+            case 'Smooth': return `sin(x*0.05)*10 + cos(z*0.05)*10 + ${baseNoise}*5`;
+            case 'Realistic': return `octaved(x*0.01, z*0.01, 4, 0.5) * 40`;
+            case 'Fantasy': return `sin(x*0.1)*cos(z*0.1)*10 + pow(abs(${baseNoise}), 3)*15`;
+            case 'Underwater': return `min(-2, ${baseNoise} * 20)`;
+            case 'Cavern': return `abs(${baseNoise}*20) * -1 + 10`;
+            case 'Holes': return `10 - max(0, sin(x*0.2)*sin(z*0.2)*20)`;
+            case 'Notch': return `${baseNoise} * 20 + (rand() > 0.9 ? 10 : 0)`;
+            
+            // STRUCTURE / MAZE
+            case 'Maze': return `floor(sin(x*0.2) + cos(z*0.2) + 1.5) * 10`;
+            case 'Giant Maze': return `floor(sin(x*0.05) + cos(z*0.05) + 1.2) * 20`;
+            case 'Auto Maze': return `(perlin(x*0.1,0,z*0.1) > 0.2) ? 10 : 0`;
+            case 'Skyscraper': return `(mod(x, 10) < 3 && mod(z, 10) < 3) ? ${randExpr} + 20 : 0`;
+            
+            // ABSTRACTION
+            case 'Void': return `(sqrt(x*x+z*z) > 20) ? ${randExpr} : -50`;
+            case 'Floating': return `${baseNoise}*10 + 30`;
+            case 'Floating Island': return `max(0, 30 - sqrt(x*x+z*z)) + ${baseNoise}*5 + 20`;
+            case 'Hell': return `abs(tan(x*0.05 + z*0.05)) * 10 + ${baseNoise}*5`;
+            case 'Underworld': return `${baseNoise} * 10 - 30`;
+            
+            // Default to random expression if something fails
+            default: return randExpr;
+        }
     }
 };
 
 // ==========================================
-// 3. THREE.JS SCENE (ISOMETRIC SETUP)
+// 4. THREE.JS SCENE
 // ==========================================
 
 const container = document.getElementById('viewport');
@@ -203,7 +280,7 @@ dirLight.shadow.camera.far = 1000;
 scene.add(dirLight);
 
 // ==========================================
-// 4. INFINITE VOXEL SYSTEM
+// 5. INFINITE VOXEL SYSTEM
 // ==========================================
 
 const GRID = 200; 
@@ -322,7 +399,7 @@ function updateTerrain(force = false) {
 }
 
 // ==========================================
-// 5. UI, HISTORY & TABS
+// 6. UI, HISTORY & TABS
 // ==========================================
 
 const ui = {
@@ -376,14 +453,9 @@ function initGen() {
 
 // 2. HISTORY & SAVED LOGIC
 function addToHistory(item) {
-    // Add to top, limit to 50
     historyList.unshift(item);
     if(historyList.length > 50) historyList.pop();
-    
-    // Only re-render if looking at history tab
-    if(currentTab === 'history') {
-        renderSidebar();
-    }
+    if(currentTab === 'history') renderSidebar();
 }
 
 function saveCurrent() {
@@ -394,7 +466,7 @@ function saveCurrent() {
         name: ui.genName.textContent
     };
     
-    // Avoid duplicates based on formula
+    // Avoid duplicates
     if(!savedList.some(s => s.formula === item.formula)) {
         savedList.unshift(item);
         showToast("SAVED!");
@@ -503,7 +575,6 @@ ui.zoomSlider.oninput = () => {
 };
 
 controls.addEventListener('change', () => {
-    // Keep slider in sync
     const z = Math.min(100, Math.max(5, camera.zoom * 20));
     ui.zoomSlider.value = z;
     updateTerrain();
