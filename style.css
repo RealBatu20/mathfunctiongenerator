@@ -78,6 +78,35 @@ body {
     color: #000;
 }
 
+/* COORDINATE DISPLAY */
+.coord-display {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 10px 15px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+    z-index: 10;
+}
+
+#coords {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-weight: bold;
+    font-size: 0.9rem;
+    margin-bottom: 2px;
+}
+
+.world-label {
+    font-size: 0.65rem;
+    color: var(--text-mute);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
 .zoom-container {
     position: absolute;
     right: 20px;
