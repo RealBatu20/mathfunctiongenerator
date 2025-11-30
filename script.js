@@ -114,7 +114,8 @@ let isRealisticOnly = false;
 const Generator = {
     ops: ['+','-','*'],
     funcs: ['sin','cos','abs','floor','round','sqrt'],
-    noiseTypes: ['Perlin', 'Simplex', 'Normal', 'Blended'],
+    // Added None here
+    noiseTypes: ['Perlin', 'Simplex', 'Normal', 'Blended', 'None'],
     
     themes: [
         'Blocky', 'Smooth', 'Upwards', 'Downward', 'Reverse', 'Forward', 
@@ -131,11 +132,22 @@ const Generator = {
     pick: arr => arr[Math.floor(Math.random()*arr.length)],
     
     genExpr: function(depth, noiseKey) {
+        // Recursion Termination
         if(depth <= 0) {
             const r = Math.random();
             if(r < 0.6) return (Math.random() < 0.5 ? 'x' : 'z') + '*' + (Math.random()*0.15 + 0.01).toFixed(3);
             return (Math.random()*15).toFixed(1);
         }
+
+        // Logic Branch: NO NOISE if 'None'
+        if (noiseKey === 'None') {
+            const type = Math.random();
+            // 50% Op, 50% Func. 0% Noise.
+            if(type < 0.5) return `(${this.genExpr(depth-1, noiseKey)} ${this.pick(this.ops)} ${this.genExpr(depth-1, noiseKey)})`;
+            return `${this.pick(this.funcs)}(${this.genExpr(depth-1, noiseKey)})`;
+        }
+
+        // Standard Random Logic with Noise
         const type = Math.random();
         if(type < 0.3) return `(${this.genExpr(depth-1, noiseKey)} ${this.pick(this.ops)} ${this.genExpr(depth-1, noiseKey)})`;
         if(type < 0.6) return `${this.pick(this.funcs)}(${this.genExpr(depth-1, noiseKey)})`;
@@ -147,12 +159,10 @@ const Generator = {
         let theme, level, noise;
         
         if (isRealisticOnly) {
-            // Force Realistic mode logic
             theme = 'Realistic'; 
-            level = 'Intermediate'; // Arbitrary level label, doesn't affect logic here
+            level = 'Intermediate';
             noise = this.pick(this.noiseTypes);
         } else {
-            // Normal Random Mode
             theme = this.pick(this.themes);
             level = this.pick(this.levels);
             noise = this.pick(this.noiseTypes);
@@ -169,12 +179,25 @@ const Generator = {
     },
 
     getFormulaForTheme: function(theme, noiseKey, level) {
-        // If Realistic Only is enabled, we completely ignore standard generation and return random realistic formula
+        // Define baseNoise depending on type
+        // If None, we use a Trig Interference pattern as the "Base"
+        // This ensures structure exists without random noise
+        let baseNoise;
+        if (noiseKey === 'None') {
+            baseNoise = `(sin(x*0.05) + cos(z*0.05))`;
+        } else {
+            baseNoise = `${noiseKey.toLowerCase()}(x*0.05, 0, z*0.05)`;
+        }
+
+        // Handle Realistic Mode Special Logic
         if (theme === 'Realistic' && isRealisticOnly) {
+            // If None picked in Realistic Mode, fallback to smooth hills
+            if (noiseKey === 'None') {
+                return `(sin(x*0.02) * 15 + cos(z*0.02) * 15 + sin(x*0.05 + z*0.05) * 5)`;
+            }
+            // Standard Realistic with Noise
             const scale = (Math.random() * 0.02 + 0.005).toFixed(4);
             const height = (Math.random() * 30 + 15).toFixed(0);
-            // Octaved noise using the selected noise type (via octaved func which uses simplex, or we can use noiseKey directly)
-            // Note: Ctx.octaved uses Simplex internally. To support other noise types in realistic, we construct it:
             return `octaved(x*${scale}, z*${scale}, 4, 0.5) * ${height}`;
         }
 
@@ -183,7 +206,6 @@ const Generator = {
         if(level === 'Long Math') depth = 5;
         if(level === 'Hardcoded') depth = 1;
 
-        const baseNoise = `${noiseKey.toLowerCase()}(x*0.05, 0, z*0.05)`;
         const randExpr = this.genExpr(depth, noiseKey);
 
         switch(theme) {
@@ -215,17 +237,30 @@ const Generator = {
             
             // ORGANIC
             case 'Smooth': return `sin(x*0.05)*10 + cos(z*0.05)*10 + ${baseNoise}*5`;
-            case 'Realistic': return `octaved(x*0.01, z*0.01, 4, 0.5) * 40`;
+            case 'Realistic': 
+                // Non-forced realistic logic
+                if (noiseKey === 'None') return `sin(x*0.03)*20 + cos(z*0.03)*20`;
+                return `octaved(x*0.01, z*0.01, 4, 0.5) * 40`;
+                
             case 'Fantasy': return `sin(x*0.1)*cos(z*0.1)*10 + pow(abs(${baseNoise}), 3)*15`;
             case 'Underwater': return `min(-2, ${baseNoise} * 20)`;
             case 'Cavern': return `abs(${baseNoise}*20) * -1 + 10`;
             case 'Holes': return `10 - max(0, sin(x*0.2)*sin(z*0.2)*20)`;
-            case 'Notch': return `${baseNoise} * 20 + (rand() > 0.9 ? 10 : 0)`;
+            case 'Notch': 
+                // Notch usually uses rand(), which is distinct from perlin.
+                // If None, use simple math pseudo-random
+                if (noiseKey === 'None') return `${baseNoise} * 20 + (sin(x*5)*cos(z*5) > 0.9 ? 10 : 0)`;
+                return `${baseNoise} * 20 + (rand() > 0.9 ? 10 : 0)`;
             
             // MAZE
             case 'Maze': return `floor(sin(x*0.2) + cos(z*0.2) + 1.5) * 10`;
             case 'Giant Maze': return `floor(sin(x*0.05) + cos(z*0.05) + 1.2) * 20`;
-            case 'Auto Maze': return `(perlin(x*0.1,0,z*0.1) > 0.2) ? 10 : 0`;
+            case 'Auto Maze': 
+                // Auto maze usually uses Perlin threshold.
+                // If None, use Trig threshold.
+                if (noiseKey === 'None') return `(sin(x*0.1)*cos(z*0.1) > 0.2) ? 10 : 0`;
+                return `(perlin(x*0.1,0,z*0.1) > 0.2) ? 10 : 0`;
+            
             case 'Skyscraper': return `(mod(x, 10) < 3 && mod(z, 10) < 3) ? ${randExpr} + 20 : 0`;
             
             // ABSTRACT
