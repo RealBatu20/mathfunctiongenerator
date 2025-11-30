@@ -109,13 +109,13 @@ const NameGen = {
 // 3. ADVANCED GENERATOR
 // ==========================================
 
+let isRealisticOnly = false;
+
 const Generator = {
-    // Math Primitives
     ops: ['+','-','*'],
     funcs: ['sin','cos','abs','floor','round','sqrt'],
     noiseTypes: ['Perlin', 'Simplex', 'Normal', 'Blended'],
     
-    // THEMES (GENERATION TYPES)
     themes: [
         'Blocky', 'Smooth', 'Upwards', 'Downward', 'Reverse', 'Forward', 
         'FlipX', 'FlipY', 'FlipZ', 'Void', 'Tower', 'Skyscraper', 
@@ -126,12 +126,10 @@ const Generator = {
         'Maze', 'Giant Maze', 'Auto Maze'
     ],
     
-    // LEVELS (Complexity)
     levels: ['Hardcoded', 'Expert', 'Unreal', 'Long Math', 'Intermediate'],
 
     pick: arr => arr[Math.floor(Math.random()*arr.length)],
     
-    // Generate a random math expression fragment
     genExpr: function(depth, noiseKey) {
         if(depth <= 0) {
             const r = Math.random();
@@ -139,18 +137,26 @@ const Generator = {
             return (Math.random()*15).toFixed(1);
         }
         const type = Math.random();
-        // 30% Binary Op, 30% Unary Op, 40% Noise
         if(type < 0.3) return `(${this.genExpr(depth-1, noiseKey)} ${this.pick(this.ops)} ${this.genExpr(depth-1, noiseKey)})`;
         if(type < 0.6) return `${this.pick(this.funcs)}(${this.genExpr(depth-1, noiseKey)})`;
         
         return `${noiseKey.toLowerCase()}(x*${(Math.random()*0.1).toFixed(3)}, 0, z*${(Math.random()*0.1).toFixed(3)}) * ${(Math.random()*20+5).toFixed(0)}`;
     },
 
-    // Main entry point
     create: function() {
-        const theme = this.pick(this.themes);
-        const level = this.pick(this.levels);
-        const noise = this.pick(this.noiseTypes);
+        let theme, level, noise;
+        
+        if (isRealisticOnly) {
+            // Force Realistic mode logic
+            theme = 'Realistic'; 
+            level = 'Intermediate'; // Arbitrary level label, doesn't affect logic here
+            noise = this.pick(this.noiseTypes);
+        } else {
+            // Normal Random Mode
+            theme = this.pick(this.themes);
+            level = this.pick(this.levels);
+            noise = this.pick(this.noiseTypes);
+        }
         
         let formula = this.getFormulaForTheme(theme, noise, level);
 
@@ -162,9 +168,16 @@ const Generator = {
         };
     },
 
-    // Theme Logic
     getFormulaForTheme: function(theme, noiseKey, level) {
-        // Base complexity based on level
+        // If Realistic Only is enabled, we completely ignore standard generation and return random realistic formula
+        if (theme === 'Realistic' && isRealisticOnly) {
+            const scale = (Math.random() * 0.02 + 0.005).toFixed(4);
+            const height = (Math.random() * 30 + 15).toFixed(0);
+            // Octaved noise using the selected noise type (via octaved func which uses simplex, or we can use noiseKey directly)
+            // Note: Ctx.octaved uses Simplex internally. To support other noise types in realistic, we construct it:
+            return `octaved(x*${scale}, z*${scale}, 4, 0.5) * ${height}`;
+        }
+
         let depth = 3;
         if(level === 'Expert') depth = 4;
         if(level === 'Long Math') depth = 5;
@@ -200,7 +213,7 @@ const Generator = {
             case 'Star': return `max(0, 30 - sqrt(x*x+z*z) + sin(atan2(z,x)*5)*10)`;
             case 'Tower': return `max(0, 50 - sqrt(x*x+z*z)*2)`;
             
-            // ORGANIC / NATURE
+            // ORGANIC
             case 'Smooth': return `sin(x*0.05)*10 + cos(z*0.05)*10 + ${baseNoise}*5`;
             case 'Realistic': return `octaved(x*0.01, z*0.01, 4, 0.5) * 40`;
             case 'Fantasy': return `sin(x*0.1)*cos(z*0.1)*10 + pow(abs(${baseNoise}), 3)*15`;
@@ -209,20 +222,19 @@ const Generator = {
             case 'Holes': return `10 - max(0, sin(x*0.2)*sin(z*0.2)*20)`;
             case 'Notch': return `${baseNoise} * 20 + (rand() > 0.9 ? 10 : 0)`;
             
-            // STRUCTURE / MAZE
+            // MAZE
             case 'Maze': return `floor(sin(x*0.2) + cos(z*0.2) + 1.5) * 10`;
             case 'Giant Maze': return `floor(sin(x*0.05) + cos(z*0.05) + 1.2) * 20`;
             case 'Auto Maze': return `(perlin(x*0.1,0,z*0.1) > 0.2) ? 10 : 0`;
             case 'Skyscraper': return `(mod(x, 10) < 3 && mod(z, 10) < 3) ? ${randExpr} + 20 : 0`;
             
-            // ABSTRACTION
+            // ABSTRACT
             case 'Void': return `(sqrt(x*x+z*z) > 20) ? ${randExpr} : -50`;
             case 'Floating': return `${baseNoise}*10 + 30`;
             case 'Floating Island': return `max(0, 30 - sqrt(x*x+z*z)) + ${baseNoise}*5 + 20`;
             case 'Hell': return `abs(tan(x*0.05 + z*0.05)) * 10 + ${baseNoise}*5`;
             case 'Underworld': return `${baseNoise} * 10 - 30`;
             
-            // Default to random expression if something fails
             default: return randExpr;
         }
     }
@@ -409,6 +421,7 @@ const ui = {
     btnSave: document.getElementById('save-btn'),
     btnHist: document.getElementById('history-btn'),
     btnCloseHist: document.getElementById('close-history'),
+    btnToggleRealistic: document.getElementById('toggle-realistic'),
     zoomSlider: document.getElementById('zoom-slider'),
     sidebar: document.getElementById('sidebar'),
     sidebarContent: document.getElementById('sidebar-content'),
@@ -558,6 +571,20 @@ ui.input.oninput = () => {
     ui.genName.textContent = "Edited Formula";
     compiledFunc = compileFormula(ui.input.value);
     updateTerrain(true);
+};
+
+// REALISTIC TOGGLE LOGIC
+ui.btnToggleRealistic.onclick = () => {
+    isRealisticOnly = !isRealisticOnly;
+    if(isRealisticOnly) {
+        ui.btnToggleRealistic.innerHTML = "<span>🌿</span> REALISTIC: ON";
+        ui.btnToggleRealistic.classList.add('realistic-on');
+        showToast("REALISTIC MODE ON");
+    } else {
+        ui.btnToggleRealistic.innerHTML = "<span>🌿</span> REALISTIC: OFF";
+        ui.btnToggleRealistic.classList.remove('realistic-on');
+        showToast("REALISTIC MODE OFF");
+    }
 };
 
 function showToast(msg) {
