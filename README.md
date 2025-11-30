@@ -1,2 +1,2 @@
-# mathfunctiongenerator
-Math Function Formula Generator for TerraMath
+# Math Function Formula Generator
+for TerraMath
