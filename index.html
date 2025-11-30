@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ultimate Voxel Math Gen - 100k World</title>
+    <title>Ultimate Voxel Math Gen - Infinite World</title>
     <link rel="stylesheet" href="style.css">
     <script type="importmap">
         {
@@ -27,16 +27,11 @@
                 </button>
             </div>
 
-            <!-- Position Display -->
-            <div class="coord-display">
-                <div id="coords">X: 0 | Z: 0</div>
-                <div class="world-label">WORLD: 100k x 100k</div>
-            </div>
-
             <!-- Zoom Slider -->
             <div class="zoom-container">
                 <label for="zoom-slider">+</label>
-                <input type="range" id="zoom-slider" min="0" max="100" value="50" orient="vertical">
+                <!-- Range reversed visually in CSS, but logic handles it -->
+                <input type="range" id="zoom-slider" min="10" max="300" step="1" orient="vertical">
                 <label for="zoom-slider">-</label>
             </div>
 
