@@ -38,7 +38,8 @@ body {
 #viewport {
     flex: 1;
     position: relative;
-    background: linear-gradient(to bottom, #87CEEB 0%, #E0F7FA 100%);
+    /* Clean Blue Sky for Isometric look */
+    background: #87CEEB; 
     overflow: hidden;
     cursor: move;
 }
@@ -103,7 +104,6 @@ body {
     user-select: none;
 }
 
-/* Vertical Slider Logic */
 input[type=range][orient=vertical] {
     writing-mode: bt-lr; 
     -webkit-appearance: slider-vertical;
