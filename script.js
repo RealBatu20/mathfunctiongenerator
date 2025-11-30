@@ -82,6 +82,8 @@ const Ctx = {
     },
     simplex: (x,y,z) => Noise.simplex(x,z),
     perlin: (x,y,z) => Noise.simplex(x,z),
+    normal: (x,y,z) => Ctx.randnormal(0, 1),
+    blended: (x,y,z) => (Noise.simplex(x,z) + Math.sin(x)*Math.cos(z)) * 0.5,
     octaved: (x, z, oct, per) => {
         let total = 0, amp = 1, freq = 1, max = 0;
         for(let i=0; i<(oct||4); i++){
@@ -92,30 +94,62 @@ const Ctx = {
     }
 };
 
+// ==========================================
+// 2. NAME & GENERATOR
+// ==========================================
+
+const NameGen = {
+    adj: ['Cosmic','Quantum','Voxel','Hyper','Cyber','Glitch','Floating','Lost','Neon','Dark','Solar','Lunar','Infinite','Fractal','Recursive','Broken','Twisted','Hollow','Solid'],
+    noun: ['Lands','Waves','Mountains','Valley','Spire','Grid','Matrix','Core','Void','Peaks','Dunes','Ocean','Maze','Labyrinth','Citadel','Expanse','Realm','Sector','Zone'],
+    get: function() { return this.pick(this.adj) + ' ' + this.pick(this.noun); },
+    pick: (arr) => arr[Math.floor(Math.random() * arr.length)]
+};
+
 const Generator = {
     ops: ['+','-','*'],
     funcs: ['sin','cos','abs','floor'],
-    noise: ['simplex','octaved'],
+    // ONLY VALID NOISE TYPES
+    noiseTypes: ['Perlin', 'Simplex', 'Normal', 'Blended'],
+    
     pick: arr => arr[Math.floor(Math.random()*arr.length)],
-    genExpr: function(depth) {
+    
+    genExpr: function(depth, noiseKey) {
         if(depth <= 0) {
             const r = Math.random();
             if(r < 0.6) return (Math.random() < 0.5 ? 'x' : 'z') + '*' + (Math.random()*0.15).toFixed(3);
             return (Math.random()*10).toFixed(1);
         }
         const type = Math.random();
-        if(type < 0.3) return `(${this.genExpr(depth-1)} ${this.pick(this.ops)} ${this.genExpr(depth-1)})`;
-        if(type < 0.6) return `${this.pick(this.funcs)}(${this.genExpr(depth-1)})`;
-        return `${this.pick(this.noise)}(x*0.05, 0, z*0.05) * 10`;
+        if(type < 0.3) return `(${this.genExpr(depth-1, noiseKey)} ${this.pick(this.ops)} ${this.genExpr(depth-1, noiseKey)})`;
+        if(type < 0.6) return `${this.pick(this.funcs)}(${this.genExpr(depth-1, noiseKey)})`;
+        
+        // Use the specific noise type for this generation
+        return `${noiseKey.toLowerCase()}(x*0.05, 0, z*0.05) * 15`;
     },
-    create: function(type) {
-        if(type === 'HARDCODED') return `floor(sin(x*0.1)*cos(z*0.1)*10)`;
-        if(type === 'LONG MATH') return `${this.genExpr(2)} + ${this.genExpr(2)}`;
-        return `${this.genExpr(3)} * 15`;
+
+    create: function() {
+        const noiseType = this.pick(this.noiseTypes);
+        const categories = ['Hardcoded', 'Expert', 'Unreal', 'Long Math', 'Intermediate'];
+        const genType = this.pick(categories);
+        
+        let formula = "";
+        
+        if (genType === 'Hardcoded') {
+            formula = `floor(${noiseType.toLowerCase()}(x*0.1, 0, z*0.1) * 10)`;
+        } else if (genType === 'Long Math') {
+            formula = `${this.genExpr(2, noiseType)} + ${this.genExpr(2, noiseType)}`;
+        } else {
+            formula = `${this.genExpr(3, noiseType)} * 10`;
+        }
+
+        // Return object with all metadata
+        return {
+            formula: formula,
+            noise: noiseType, // Perlin, Simplex, Normal, Blended
+            type: genType // Expert, Unreal, etc.
+        };
     }
 };
-
-const Categories = ['HARDCODED', 'INTERMEDIATE', 'EXPERT', 'UNREAL', 'LONG MATH'];
 
 // ==========================================
 // 3. THREE.JS SCENE (ISOMETRIC SETUP)
@@ -124,20 +158,16 @@ const Categories = ['HARDCODED', 'INTERMEDIATE', 'EXPERT', 'UNREAL', 'LONG MATH'
 const container = document.getElementById('viewport');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
-// NO FOG requested
 scene.fog = null; 
 
-// ORTHOGRAPHIC CAMERA (True Isometric)
-// View size determines how much of the world is seen (Zoom)
 let aspect = container.clientWidth / container.clientHeight;
-let viewSize = 40; // Initial zoom level
+let viewSize = 40;
 const camera = new THREE.OrthographicCamera(
     -viewSize * aspect, viewSize * aspect,
     viewSize, -viewSize,
-    1, 2000 // Huge Far plane for isometric distance
+    1, 2000 
 );
 
-// Isometric Position: Look from a corner
 camera.position.set(500, 500, 500); 
 camera.lookAt(0, 0, 0);
 
@@ -150,7 +180,7 @@ container.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; 
 controls.dampingFactor = 0.05;
-controls.enableZoom = true; // We handle zoom manually to sync with UI, or let Orbit handle it
+controls.enableZoom = true;
 controls.zoomSpeed = 1.0;
 controls.rotateSpeed = 0.5;
 controls.autoRotate = true;
@@ -162,7 +192,7 @@ scene.add(ambi);
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
 dirLight.position.set(200, 400, 200);
 dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 4096; // High Res Shadows
+dirLight.shadow.mapSize.width = 4096;
 dirLight.shadow.mapSize.height = 4096;
 const d = 300; 
 dirLight.shadow.camera.left = -d;
@@ -176,7 +206,6 @@ scene.add(dirLight);
 // 4. INFINITE VOXEL SYSTEM
 // ==========================================
 
-// 200x200 Grid (40,000 blocks per layer)
 const GRID = 200; 
 const LAYERS = 4;
 const TOTAL_INSTANCES = GRID * GRID * LAYERS;
@@ -191,7 +220,7 @@ const material = new THREE.MeshStandardMaterial({
 const instMesh = new THREE.InstancedMesh(geometry, material, TOTAL_INSTANCES);
 instMesh.castShadow = true;
 instMesh.receiveShadow = true;
-instMesh.frustumCulled = false; // Always render
+instMesh.frustumCulled = false; 
 scene.add(instMesh);
 
 const dummy = new THREE.Object3D();
@@ -208,7 +237,6 @@ const colors = {
     neon: new THREE.Color(0x00e5ff)
 };
 
-let currentFormula = "";
 let compiledFunc = null;
 let lastUpdateX = -999999;
 let lastUpdateZ = -999999;
@@ -230,7 +258,6 @@ function compileFormula(str) {
 function updateTerrain(force = false) {
     if(!compiledFunc) return;
 
-    // Use controls target (Where camera is looking) as the center
     const cx = Math.floor(controls.target.x);
     const cz = Math.floor(controls.target.z);
 
@@ -238,7 +265,6 @@ function updateTerrain(force = false) {
     lastUpdateX = cx;
     lastUpdateZ = cz;
     
-    // Light follows center to ensure shadows exist everywhere
     dirLight.position.set(cx + 200, 400, cz + 200);
     dirLight.target.position.set(cx, 0, cz);
     dirLight.target.updateMatrixWorld();
@@ -296,77 +322,210 @@ function updateTerrain(force = false) {
 }
 
 // ==========================================
-// 5. UI & EVENTS
+// 5. UI, HISTORY & TABS
 // ==========================================
 
 const ui = {
     input: document.getElementById('formula-input'),
     btnGen: document.getElementById('gen-btn'),
+    btnCopy: document.getElementById('copy-btn'),
+    btnSave: document.getElementById('save-btn'),
+    btnHist: document.getElementById('history-btn'),
+    btnCloseHist: document.getElementById('close-history'),
     zoomSlider: document.getElementById('zoom-slider'),
+    sidebar: document.getElementById('sidebar'),
+    sidebarContent: document.getElementById('sidebar-content'),
+    tabHistory: document.getElementById('tab-history'),
+    tabSaved: document.getElementById('tab-saved'),
+    tagNoise: document.getElementById('tag-noise'),
+    tagGen: document.getElementById('tag-gen'),
+    genName: document.getElementById('gen-name')
 };
 
-// Update Orthographic Zoom
-// Slider Value: 5 (Far) to 100 (Close)
-ui.zoomSlider.addEventListener('input', () => {
-    const zoomVal = parseInt(ui.zoomSlider.value);
-    
-    // In Orthographic, lower Zoom number = Farther away (sees more world)
-    // But typical Zoom Logic is Higher = Closer.
-    // Let's use camera.zoom property directly
-    // Slider 5 -> Zoom 0.2 (Far)
-    // Slider 100 -> Zoom 3.0 (Close)
-    
-    // Mapping:
-    const newZoom = zoomVal / 20; // 0.25 to 5.0
-    camera.zoom = newZoom;
-    camera.updateProjectionMatrix();
-});
+// DATA STORES
+let historyList = [];
+let savedList = [];
+let currentTab = 'history';
 
-// Sync slider if OrbitControls changes zoom via scroll
-controls.addEventListener('change', () => {
-    const val = Math.min(100, Math.max(5, camera.zoom * 20));
-    ui.zoomSlider.value = val;
-    updateTerrain(); // Update terrain as we move
-});
-
+// 1. GENERATION LOGIC
 function initGen() {
-    const type = Generator.pick(Categories);
-    const formula = Generator.create(type);
-    ui.input.value = formula;
-    compiledFunc = compileFormula(formula);
-    updateTerrain(true);
+    Noise.seed(); // New Seed
     
-    document.getElementById('tag-gen').textContent = type;
-    document.getElementById('tag-noise').textContent = 'RND';
-    document.getElementById('gen-name').textContent = 'Isometric Map';
+    // Create new data
+    const data = Generator.create();
+    const name = NameGen.get();
+
+    // Update UI
+    ui.input.value = data.formula;
+    ui.tagNoise.textContent = data.noise.toUpperCase();
+    ui.tagGen.textContent = data.type.toUpperCase();
+    ui.genName.textContent = name;
+
+    // Render
+    compiledFunc = compileFormula(data.formula);
+    updateTerrain(true);
+
+    // LOG TO HISTORY
+    addToHistory({
+        formula: data.formula,
+        noise: data.noise,
+        type: data.type,
+        name: name
+    });
 }
 
-ui.btnGen.addEventListener('click', () => {
-    initGen();
-    Noise.seed();
-});
+// 2. HISTORY & SAVED LOGIC
+function addToHistory(item) {
+    // Add to top, limit to 50
+    historyList.unshift(item);
+    if(historyList.length > 50) historyList.pop();
+    
+    // Only re-render if looking at history tab
+    if(currentTab === 'history') {
+        renderSidebar();
+    }
+}
 
-ui.input.addEventListener('input', () => {
+function saveCurrent() {
+    const item = {
+        formula: ui.input.value,
+        noise: ui.tagNoise.textContent,
+        type: ui.tagGen.textContent,
+        name: ui.genName.textContent
+    };
+    
+    // Avoid duplicates based on formula
+    if(!savedList.some(s => s.formula === item.formula)) {
+        savedList.unshift(item);
+        showToast("SAVED!");
+        if(currentTab === 'saved') renderSidebar();
+    } else {
+        showToast("ALREADY SAVED");
+    }
+}
+
+// 3. RENDER SIDEBAR
+function renderSidebar() {
+    ui.sidebarContent.innerHTML = '';
+    const list = currentTab === 'history' ? historyList : savedList;
+
+    if(list.length === 0) {
+        ui.sidebarContent.innerHTML = `<div style="padding:20px; text-align:center; color:#666;">No ${currentTab} items.</div>`;
+        return;
+    }
+
+    list.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.className = 'history-item';
+        
+        row.innerHTML = `
+            <div class="history-content">
+                <div class="h-tags">
+                    <span class="h-badge n">${item.noise}</span>
+                    <span class="h-badge t">${item.type}</span>
+                    <span class="h-name">${item.name}</span>
+                </div>
+                <span class="h-code">${item.formula}</span>
+            </div>
+            <button class="history-delete">×</button>
+        `;
+
+        // Load Logic
+        row.querySelector('.history-content').onclick = () => {
+            ui.input.value = item.formula;
+            ui.tagNoise.textContent = item.noise;
+            ui.tagGen.textContent = item.type;
+            ui.genName.textContent = item.name;
+            compiledFunc = compileFormula(item.formula);
+            updateTerrain(true);
+        };
+
+        // Delete Logic
+        row.querySelector('.history-delete').onclick = (e) => {
+            e.stopPropagation();
+            list.splice(index, 1);
+            renderSidebar();
+        };
+
+        ui.sidebarContent.appendChild(row);
+    });
+}
+
+// 4. TAB SWITCHING
+ui.tabHistory.onclick = () => {
+    currentTab = 'history';
+    ui.tabHistory.classList.add('active');
+    ui.tabSaved.classList.remove('active');
+    renderSidebar();
+};
+
+ui.tabSaved.onclick = () => {
+    currentTab = 'saved';
+    ui.tabSaved.classList.add('active');
+    ui.tabHistory.classList.remove('active');
+    renderSidebar();
+};
+
+// 5. EVENT LISTENERS
+ui.btnGen.onclick = initGen;
+ui.btnSave.onclick = saveCurrent;
+ui.btnHist.onclick = () => {
+    ui.sidebar.classList.add('open');
+    renderSidebar();
+};
+ui.btnCloseHist.onclick = () => ui.sidebar.classList.remove('open');
+
+ui.btnCopy.onclick = () => {
+    navigator.clipboard.writeText(ui.input.value);
+    showToast("COPIED");
+};
+
+ui.input.oninput = () => {
+    ui.tagNoise.textContent = "USER";
+    ui.tagGen.textContent = "CUSTOM";
+    ui.genName.textContent = "Edited Formula";
     compiledFunc = compileFormula(ui.input.value);
     updateTerrain(true);
+};
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.opacity = 1;
+    setTimeout(() => t.style.opacity = 0, 1500);
+}
+
+// Zoom
+ui.zoomSlider.oninput = () => {
+    const val = parseInt(ui.zoomSlider.value);
+    camera.zoom = val / 20;
+    camera.updateProjectionMatrix();
+};
+
+controls.addEventListener('change', () => {
+    // Keep slider in sync
+    const z = Math.min(100, Math.max(5, camera.zoom * 20));
+    ui.zoomSlider.value = z;
+    updateTerrain();
 });
 
-document.getElementById('reset-cam').addEventListener('click', () => {
-    controls.target.set(0, 0, 0); // Center at world origin
-    camera.position.set(500, 500, 500); // Reset Angle
+// Reset Camera
+document.getElementById('reset-cam').onclick = () => {
+    controls.target.set(0, 0, 0);
+    camera.position.set(500, 500, 500);
     camera.zoom = 1;
     camera.updateProjectionMatrix();
     controls.update();
     ui.zoomSlider.value = 20;
     updateTerrain(true);
-});
+};
 
-document.getElementById('toggle-rotate').addEventListener('click', (e) => {
+document.getElementById('toggle-rotate').onclick = (e) => {
     controls.autoRotate = !controls.autoRotate;
     e.currentTarget.classList.toggle('active');
-});
+};
 
-window.addEventListener('resize', () => {
+window.onresize = () => {
     aspect = container.clientWidth / container.clientHeight;
     camera.left = -viewSize * aspect;
     camera.right = viewSize * aspect;
@@ -374,18 +533,9 @@ window.addEventListener('resize', () => {
     camera.bottom = -viewSize;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
-});
+};
 
-// Sidebar Logic
-document.getElementById('history-btn').addEventListener('click', () => document.getElementById('sidebar').classList.add('open'));
-document.getElementById('close-history').addEventListener('click', () => document.getElementById('sidebar').classList.remove('open'));
-document.getElementById('copy-btn').addEventListener('click', () => {
-    navigator.clipboard.writeText(ui.input.value);
-    const t = document.getElementById('toast');
-    t.style.opacity = 1;
-    setTimeout(()=>t.style.opacity=0, 1500);
-});
-
+// INITIALIZE
 initGen();
 function animate() {
     requestAnimationFrame(animate);
