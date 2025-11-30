@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ultimate Voxel Math Gen - Infinite Edition</title>
+    <title>Ultimate Voxel Math Gen - True Infinite</title>
     <link rel="stylesheet" href="style.css">
-    <!-- THREE.JS IMPORT MAP -->
     <script type="importmap">
         {
             "imports": {
@@ -19,7 +18,6 @@
 
     <div id="app-container">
         <div id="viewport">
-            <!-- Overlay Controls -->
             <div class="overlay-controls">
                 <button id="reset-cam" class="overlay-btn">
                     ⟲ RESET
@@ -29,14 +27,13 @@
                 </button>
             </div>
 
-            <!-- Zoom Slider (Center Right) -->
+            <!-- Zoom Slider -->
             <div class="zoom-container">
                 <label for="zoom-slider">+</label>
                 <input type="range" id="zoom-slider" min="0" max="100" value="50" orient="vertical">
                 <label for="zoom-slider">-</label>
             </div>
 
-            <!-- Toast Notification -->
             <div id="toast">COPIED</div>
         </div>
 
@@ -47,7 +44,7 @@
                     <span id="tag-gen" class="info-tag">READY</span>
                     <span id="gen-name" class="gen-name-text">Welcome</span>
                 </div>
-                <span style="font-size:0.7rem; opacity:0.5;">MATH GEN V4.0 INFINITE</span>
+                <span style="font-size:0.7rem; opacity:0.5;">MATH GEN V4.1 INFINITE</span>
             </div>
             
             <div class="input-wrapper">
@@ -72,9 +69,7 @@
             </div>
             <button class="close-sidebar" id="close-history">✕</button>
         </div>
-        <div id="sidebar-content">
-            <!-- Lists will be injected here -->
-        </div>
+        <div id="sidebar-content"></div>
     </aside>
 
     <script type="module" src="script.js"></script>
